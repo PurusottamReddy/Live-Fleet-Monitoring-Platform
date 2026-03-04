@@ -1,0 +1,27 @@
+CREATE TABLE IF NOT EXISTS drivers (
+  id INT PRIMARY KEY,
+  name VARCHAR(64) NOT NULL,
+  is_active TINYINT DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS trips (
+  id INT PRIMARY KEY,
+  driver_id INT NOT NULL,
+  started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  ended_at TIMESTAMP NULL,
+  risk_level VARCHAR(16) DEFAULT 'Safe',
+  violations INT DEFAULT 0,
+  FOREIGN KEY (driver_id) REFERENCES drivers(id)
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  driver_id INT NOT NULL,
+  trip_id INT NOT NULL,
+  event_type VARCHAR(32) NOT NULL,
+  speed INT NOT NULL,
+  risk_score INT NOT NULL,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (driver_id) REFERENCES drivers(id),
+  FOREIGN KEY (trip_id) REFERENCES trips(id)
+);
