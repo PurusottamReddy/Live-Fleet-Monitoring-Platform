@@ -199,7 +199,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             <div className="rounded-xl bg-slate-800/80 ring-1 ring-slate-700 p-3 shadow">
               <div className="font-semibold mb-2 text-slate-200">Alerts</div>
-              <div className="h-104 overflow-y-auto overflow-x-hidden">
+              <div className="h-104 overflow-y-auto overflow-x-hidden no-scrollbar">
                 <Alerts alerts={alerts} />
               </div>
             </div>

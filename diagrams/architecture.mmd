@@ -1,0 +1,79 @@
+flowchart TB
+  subgraph Client[Frontend: React SPA (Vite + Tailwind)]
+    NAV[Navbar]
+    P1[Dashboard]
+    P2[Analytics]
+    P3[About]
+    P4[Services]
+    P5[Contact]
+    NAV --> P1
+    NAV --> P2
+    NAV --> P3
+    NAV --> P4
+    NAV --> P5
+  end
+
+  subgraph API[Backend: Node.js + Express]
+    E[/POST /api/events/]
+    M[/GET /api/metrics/]
+    MR[/GET /api/metrics/recent/]
+    S[/POST /api/sim/start | /stop | /generate/]
+    PROC[Event Processor]
+    MET[Metrics Aggregator]
+    IO((Socket.io))
+  end
+
+  subgraph Store[Persistence]
+    MYSQL[(MySQL)]
+    MEM[[In-Memory Store]]
+  end
+
+  SIM[Simulator (IDs 101–110)] --> S
+  DEV[Driver Devices] --> E
+
+  E --> PROC
+  PROC --> MYSQL
+  PROC --> MEM
+  PROC --> IO
+
+  MET --> M
+  MYSQL --> MET
+  MEM --> MET
+  MR --> Client
+
+  IO --> P1
+  IO --> P2
+  M --> P1
+  M --> P2
+
+  P1 --- K1[Metrics Cards]
+  P1 --- K2[System Status]
+  P1 --- K3[Alerts & Event Log]
+  P1 --- K4[Charts (Recharts)]
+
+  P2 --- A1[Top Drivers]
+  P2 --- A2[Distribution by Type]
+  P2 --- A3[Avg Speed by Type]
+  P2 --- A4[Violations per Minute]
+  P2 --- A5[Violations by Hour]
+  P2 --- A6[Risk Score Trend]
+  P2 --- A7[Top Risky Trips]
+
+sequenceDiagram
+  participant Sim as Simulator
+  participant Dev as Driver Device
+  participant Api as Express API
+  participant Proc as Event Processor
+  participant Db as MySQL/In-Memory
+  participant Ws as Socket.io
+  participant Ui as React UI
+
+  Sim->>Api: POST /api/sim/generate
+  Dev->>Api: POST /api/events { driver_id, trip_id, event_type, speed }
+  Api->>Proc: process(event)
+  Proc->>Db: insert(event, risk_score)
+  Proc->>Ws: emit new_driver_event(event)
+  Ui->>Api: GET /api/metrics/recent
+  Api-->>Ui: events[]
+  Ws-->>Ui: new_driver_event(event)
+  Ui->>Ui: update metrics, alerts, charts
