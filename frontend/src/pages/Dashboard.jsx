@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
+import { useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -16,21 +15,7 @@ import SystemStatus from "../components/SystemStatus";
 import Alerts from "../components/Alerts";
 import DriverTable from "../components/DriverTable";
 
-const backendURL = "http://localhost:4000";
-
-export default function Dashboard() {
-  const [connected, setConnected] = useState(false);
-  const [alerts, setAlerts] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [epm, setEpm] = useState(0);
-  const [lastEvent, setLastEvent] = useState(null);
-  const [series, setSeries] = useState([]);
-  const [dist, setDist] = useState([
-    { type: "speeding", count: 0 },
-    { type: "harsh_braking", count: 0 },
-    { type: "drowsiness", count: 0 },
-    { type: "phone_distraction", count: 0 },
-  ]);
+export default function Dashboard({ events, alerts, connected, epm, lastEvent }) {
 
   const driverStatusSummary = useMemo(() => {
     const warnTypes = new Set(["drowsiness", "phone_distraction", "harsh_braking"]);
@@ -58,70 +43,60 @@ export default function Dashboard() {
     return { safe, warning, high };
   }, [events]);
 
-  useEffect(() => {
-    fetch(`${backendURL}/api/metrics/recent`)
-      .then((r) => r.json())
-      .then((rows) => {
-        setEvents(rows);
-      });
-  }, []);
+  const series = useMemo(() => {
+    const map = new Map();
+    for (const evt of events) {
+      const minute = new Date(evt.timestamp);
+      const key = `${minute.getHours().toString().padStart(2, "0")}:${minute.getMinutes().toString().padStart(2, "0")}`;
+      const add = evt.event_type !== "normal" ? 1 : 0;
+      map.set(key, (map.get(key) || 0) + add);
+    }
+    const arr = Array.from(map.entries()).map(([time, violations]) => ({ time, violations }));
+    arr.sort((a, b) => a.time.localeCompare(b.time));
+    return arr.slice(-60);
+  }, [events]);
 
-  useEffect(() => {
-    const socket = io(backendURL);
-    const violationsQueueRef = { current: [] };
-    socket.on("connect", () => setConnected(true));
-    socket.on("disconnect", () => setConnected(false));
-    socket.on("status", () => setConnected(true));
-    socket.on("new_driver_event", (evt) => {
-      setLastEvent(evt.timestamp);
-      setEvents((prev) => {
-        const next = [...prev, evt].slice(-500);
-        return next;
-      });
-      if (evt.event_type !== "normal") {
-        setAlerts((prev) => [evt, ...prev].slice(0, 10));
-      }
-      if (evt.event_type !== "normal") {
-        const now = Date.now();
-        violationsQueueRef.current.push(evt.timestamp || now);
-        violationsQueueRef.current = violationsQueueRef.current.filter((t) => (now - t) < 60000);
-        setEpm(violationsQueueRef.current.length);
-      }
-      setSeries((prev) => {
-        const minute = new Date(evt.timestamp);
-        const key = `${minute.getHours().toString().padStart(2, "0")}:${minute.getMinutes().toString().padStart(2, "0")}`;
-        const map = new Map(prev.map((p) => [p.time, p.violations]));
-        const add = evt.event_type !== "normal" ? 1 : 0;
-        map.set(key, (map.get(key) || 0) + add);
-        const arr = Array.from(map.entries()).map(([time, violations]) => ({ time, violations }));
-        arr.sort((a, b) => a.time.localeCompare(b.time));
-        return arr.slice(-60);
-      });
-      setDist((prev) =>
-        prev.map((d) =>
-          d.type === evt.event_type ? { ...d, count: d.count + 1 } : d
-        )
-      );
-    });
-    return () => socket.close();
-  }, []);
+  const dist = useMemo(() => {
+    const counts = { speeding: 0, harsh_braking: 0, drowsiness: 0, phone_distraction: 0 };
+    for (const evt of events) {
+      if (counts[evt.event_type] !== undefined) counts[evt.event_type] += 1;
+    }
+    return [
+      { type: "speeding", count: counts.speeding },
+      { type: "harsh_braking", count: counts.harsh_braking },
+      { type: "drowsiness", count: counts.drowsiness },
+      { type: "phone_distraction", count: counts.phone_distraction },
+    ];
+  }, [events]);
+
+  
 
   const driverRows = useMemo(() => {
-    const rows = events.map((e) => ({
-      id: e.id,
-      driver_id: e.driver_id,
-      trip_id: e.trip_id,
-      event_type: e.event_type,
-      speed: e.speed,
-      risk_level:
-        e.speed > 100
-          ? "High"
-          : e.speed > 80 || ["drowsiness", "phone_distraction", "harsh_braking"].includes(e.event_type)
-          ? "Warning"
-          : "Safe",
-      timestamp: e.timestamp,
-    }));
-    rows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    const rows = events.map((e) => {
+      const ts =
+        typeof e.timestamp === "string"
+          ? new Date(e.timestamp).getTime()
+          : typeof e.timestamp === "number"
+          ? e.timestamp
+          : typeof e.id === "number"
+          ? e.id
+          : 0;
+      return {
+        id: e.id,
+        driver_id: e.driver_id,
+        trip_id: e.trip_id,
+        event_type: e.event_type,
+        speed: e.speed,
+        risk_level:
+          e.speed > 100
+            ? "High"
+            : e.speed > 80 || ["drowsiness", "phone_distraction", "harsh_braking"].includes(e.event_type)
+            ? "Warning"
+            : "Safe",
+        timestamp: ts,
+      };
+    });
+    rows.sort((a, b) => b.timestamp - a.timestamp);
     return rows.slice(0, 15);
   }, [events]);
 

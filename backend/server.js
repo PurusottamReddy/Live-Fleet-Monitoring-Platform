@@ -35,10 +35,21 @@ async function main() {
     res.json({ status: 'ok', message: 'Fleet Monitoring Backend' });
   });
 
-  const port = process.env.BACKEND_PORT || 4000;
-  server.listen(port, () => {
-    console.log(`Backend listening on http://localhost:${port}`);
-  });
+  let port = Number(process.env.BACKEND_PORT || 4000);
+  function tryListen(p) {
+    server.listen(p, () => {
+      console.log(`Backend listening on http://localhost:${p}`);
+    }).on('error', (err) => {
+      if (err && err.code === 'EADDRINUSE') {
+        const next = p + 1;
+        console.warn(`Port ${p} in use, trying ${next}...`);
+        tryListen(next);
+      } else {
+        throw err;
+      }
+    });
+  }
+  tryListen(port);
 
   if (process.env.SIM_AUTOSTART === 'true') {
     startSimulatorOnBoot(pool, io);

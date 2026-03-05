@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
+import { useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -16,34 +15,21 @@ import {
   Legend,
 } from "recharts";
 
-const backendURL = "http://localhost:4000";
 const COLORS = ["#22d3ee", "#a3e635", "#f59e0b", "#ef4444"];
 
-export default function Analytics() {
-  const [events, setEvents] = useState([]);
-  const [series, setSeries] = useState([]);
-  useEffect(() => {
-    fetch(`${backendURL}/api/metrics/recent`)
-      .then((r) => r.json())
-      .then((rows) => {
-        setEvents(rows);
-      });
-    const socket = io(backendURL);
-    socket.on("new_driver_event", (evt) => {
-      setEvents((prev) => [...prev, evt].slice(-500));
-      setSeries((prev) => {
-        const minute = new Date(evt.timestamp);
-        const key = `${minute.getHours().toString().padStart(2, "0")}:${minute.getMinutes().toString().padStart(2, "0")}`;
-        const map = new Map(prev.map((p) => [p.time, p.count]));
-        const add = evt.event_type !== "normal" ? 1 : 0;
-        map.set(key, (map.get(key) || 0) + add);
-        const arr = Array.from(map.entries()).map(([time, count]) => ({ time, count }));
-        arr.sort((a, b) => a.time.localeCompare(b.time));
-        return arr.slice(-60);
-      });
-    });
-    return () => socket.close();
-  }, []);
+export default function Analytics({ events }) {
+  const series = useMemo(() => {
+    const map = new Map();
+    for (const evt of events) {
+      const minute = new Date(evt.timestamp);
+      const key = `${minute.getHours().toString().padStart(2, "0")}:${minute.getMinutes().toString().padStart(2, "0")}`;
+      const add = evt.event_type !== "normal" ? 1 : 0;
+      map.set(key, (map.get(key) || 0) + add);
+    }
+    const arr = Array.from(map.entries()).map(([time, count]) => ({ time, count }));
+    arr.sort((a, b) => a.time.localeCompare(b.time));
+    return arr.slice(-60);
+  }, [events]);
 
   const dist = useMemo(() => {
     const types = ["speeding", "harsh_braking", "drowsiness", "phone_distraction"];

@@ -9,19 +9,45 @@ async function initPool() {
     MYSQL_DATABASE,
   } = process.env;
   try {
-    const pool = mysql.createPool({
-      host: MYSQL_HOST || 'localhost',
-      port: Number(MYSQL_PORT),
-      user: MYSQL_USER || 'root',
-      password: MYSQL_PASSWORD || '',
-      database: MYSQL_DATABASE || 'okdriver',
-      waitForConnections: true,
-      connectionLimit: 10,
-    });
-    await pool.query('SELECT 1');
-    return pool;
+    const dbName = MYSQL_DATABASE || 'okdriver';
+    try {
+      const pool = mysql.createPool({
+        host: MYSQL_HOST || 'localhost',
+        port: Number(MYSQL_PORT),
+        user: MYSQL_USER || 'root',
+        password: MYSQL_PASSWORD || '',
+        database: dbName,
+        waitForConnections: true,
+        connectionLimit: 10,
+      });
+      await pool.query('SELECT 1');
+      return pool;
+    } catch (err) {
+      if (err && err.code === 'ER_BAD_DB_ERROR') {
+        const conn = await mysql.createConnection({
+          host: MYSQL_HOST || 'localhost',
+          port: Number(MYSQL_PORT),
+          user: MYSQL_USER || 'root',
+          password: MYSQL_PASSWORD || '',
+        });
+        await conn.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+        await conn.end();
+        const pool = mysql.createPool({
+          host: MYSQL_HOST || 'localhost',
+          port: Number(MYSQL_PORT),
+          user: MYSQL_USER || 'root',
+          password: MYSQL_PASSWORD || '',
+          database: dbName,
+          waitForConnections: true,
+          connectionLimit: 10,
+        });
+        await pool.query('SELECT 1');
+        return pool;
+      }
+      throw err;
+    }
   } catch (e) {
-    console.warn('MySQL not configured or unreachable; running without DB');
+    console.warn(`MySQL not configured or unreachable (${e && e.code ? e.code : 'unknown'}) ; running without DB`);
     return null;
   }
 }
